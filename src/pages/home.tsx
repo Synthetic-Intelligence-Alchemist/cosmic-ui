@@ -1,1008 +1,941 @@
-import {
-  MenuRoot,
-  MenuTrigger,
-  MenuPositioner,
-  MenuContent,
-  MenuItem,
-} from "@/components/ui/menu";
-import Menu from "@/components/menu";
-import { Link } from "react-router";
-import { twMerge } from "tailwind-merge";
-import { Frame } from "@/components/ui/frame";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { Button } from "@/components/ui/button";
-import { Chart, getColor } from "@/components/ui/chart";
-import { FilePenLine, CopySlash } from "lucide-react";
+import { Frame } from "@/components/ui/frame";
+import type { Paths } from "@/utils/frame";
+import { twMerge } from "tailwind-merge";
 
-function Main() {
+const PANEL_FRAME_PATHS: Paths = [
+  {
+    show: true,
+    style: {
+      strokeWidth: "1",
+      stroke: "var(--color-frame-1-stroke)",
+      fill: "var(--color-frame-1-fill)",
+    },
+    path: [
+      ["M", "20", "0"],
+      ["L", "100% - 24", "0"],
+      ["L", "100%", "24"],
+      ["L", "100%", "100% - 28"],
+      ["L", "100% - 24", "100%"],
+      ["L", "24", "100%"],
+      ["L", "0", "100% - 32"],
+      ["L", "0", "24"],
+      ["L", "20", "0"],
+    ],
+  },
+  {
+    show: true,
+    style: {
+      strokeWidth: "1",
+      stroke: "var(--color-frame-2-stroke)",
+      fill: "var(--color-frame-2-fill)",
+    },
+    path: [
+      ["M", "10", "100% - 12"],
+      ["L", "100% - 10", "100% - 12"],
+      ["L", "100% - 18", "100%"],
+      ["L", "18", "100%"],
+      ["L", "10", "100% - 12"],
+    ],
+  },
+];
+
+const VIEWER_FRAME_PATHS: Paths = [
+  {
+    show: true,
+    style: {
+      strokeWidth: "1",
+      stroke: "var(--color-frame-1-stroke)",
+      fill: "var(--color-frame-1-fill)",
+    },
+    path: [
+      ["M", "32", "0"],
+      ["L", "100% - 36", "0"],
+      ["L", "100%", "40"],
+      ["L", "100%", "100% - 36"],
+      ["L", "100% - 36", "100%"],
+      ["L", "36", "100%"],
+      ["L", "0", "100% - 40"],
+      ["L", "0", "36"],
+      ["L", "32", "0"],
+    ],
+  },
+  {
+    show: true,
+    style: {
+      strokeWidth: "1",
+      stroke: "var(--color-frame-2-stroke)",
+      fill: "var(--color-frame-2-fill)",
+    },
+    path: [
+      ["M", "26", "100% - 18"],
+      ["L", "100% - 28", "100% - 18"],
+      ["L", "100% - 42", "100%"],
+      ["L", "42", "100%"],
+      ["L", "26", "100% - 18"],
+    ],
+  },
+];
+
+const OVERLAY_FRAME_PATHS: Paths = [
+  {
+    show: true,
+    style: {
+      strokeWidth: "1",
+      stroke: "var(--color-frame-1-stroke)",
+      fill: "var(--color-frame-1-fill)",
+    },
+    path: [
+      ["M", "14", "0"],
+      ["L", "100% - 18", "0"],
+      ["L", "100%", "28"],
+      ["L", "100%", "100% - 24"],
+      ["L", "100% - 18", "100%"],
+      ["L", "18", "100%"],
+      ["L", "0", "100% - 28"],
+      ["L", "0", "22"],
+      ["L", "14", "0"],
+    ],
+  },
+  {
+    show: true,
+    style: {
+      strokeWidth: "1",
+      stroke: "var(--color-frame-2-stroke)",
+      fill: "var(--color-frame-2-fill)",
+    },
+    path: [
+      ["M", "8", "100% - 12"],
+      ["L", "100% - 12", "100% - 12"],
+      ["L", "100% - 18", "100%"],
+      ["L", "14", "100%"],
+      ["L", "8", "100% - 12"],
+    ],
+  },
+];
+
+type MoleculeData = {
+  atoms: {
+    element: string;
+    x: number;
+    y: number;
+    z: number;
+    color: number;
+  }[];
+  bonds: [number, number][];
+  geometry: string;
+  bondAngle: string;
+  polarity: string;
+  dipole: string;
+  polarityVector?: { x: number; y: number; z: number };
+  metadata: {
+    label: string;
+    value: string;
+  }[];
+};
+
+const MOLECULES: Record<string, MoleculeData> = {
+  "4-bromo-2-5-dimethoxyphenylethylamine": {
+    atoms: [
+      { element: "Br", x: 3.5303, y: -1.3547, z: -0.8059, color: 0xa52a2a },
+      { element: "O", x: -1.6027, y: -1.9546, z: -0.0908, color: 0x96ceb4 },
+      { element: "O", x: 2.6493, y: 1.5578, z: -0.1173, color: 0x96ceb4 },
+      { element: "N", x: -4.1874, y: 1.7812, z: -0.3936, color: 0x45b7d1 },
+      { element: "C", x: -0.7502, y: 0.2679, z: 0.1903, color: 0x4ecdc4 },
+      { element: "C", x: -2.112, y: 0.7922, z: 0.5068, color: 0x4ecdc4 },
+      { element: "C", x: -0.555, y: -1.0834, z: -0.0955, color: 0x4ecdc4 },
+      { element: "C", x: -2.8885, y: 1.2622, z: -0.7286, color: 0x4ecdc4 },
+      { element: "C", x: 0.3331, y: 1.1464, z: 0.1809, color: 0x4ecdc4 },
+      { element: "C", x: 1.6118, y: 0.6736, z: -0.1145, color: 0x4ecdc4 },
+      { element: "C", x: 0.7237, y: -1.5561, z: -0.3907, color: 0x4ecdc4 },
+      { element: "C", x: 1.807, y: -0.6776, z: -0.4002, color: 0x4ecdc4 },
+      { element: "C", x: -1.9022, y: -2.6009, z: 1.1446, color: 0x4ecdc4 },
+      { element: "C", x: 3.3427, y: 1.7458, z: 1.1144, color: 0x4ecdc4 },
+      { element: "H", x: -2.0139, y: 1.6295, z: 1.2123, color: 0xff6b6b },
+      { element: "H", x: -2.7013, y: 0.0457, z: 1.0511, color: 0xff6b6b },
+      { element: "H", x: -2.3196, y: 2.0367, z: -1.256, color: 0xff6b6b },
+      { element: "H", x: -3.0065, y: 0.4313, z: -1.4338, color: 0xff6b6b },
+      { element: "H", x: 0.1868, y: 2.2017, z: 0.3993, color: 0xff6b6b },
+      { element: "H", x: 0.8646, y: -2.6114, z: -0.6129, color: 0xff6b6b },
+      { element: "H", x: -4.094, y: 2.5576, z: 0.2603, color: 0xff6b6b },
+      { element: "H", x: -4.7309, y: 1.0706, z: 0.0948, color: 0xff6b6b },
+      { element: "H", x: -1.199, y: -3.4235, z: 1.308, color: 0xff6b6b },
+      { element: "H", x: -2.9131, y: -3.0125, z: 1.0803, color: 0xff6b6b },
+      { element: "H", x: -1.8579, y: -1.9074, z: 1.9904, color: 0xff6b6b },
+      { element: "H", x: 3.6707, y: 0.7923, z: 1.5395, color: 0xff6b6b },
+      { element: "H", x: 2.7008, y: 2.2695, z: 1.8299, color: 0xff6b6b },
+      { element: "H", x: 4.224, y: 2.3633, z: 0.9202, color: 0xff6b6b },
+    ],
+    bonds: [
+      [0, 11],
+      [1, 6],
+      [1, 12],
+      [2, 9],
+      [2, 13],
+      [3, 7],
+      [3, 20],
+      [3, 21],
+      [4, 5],
+      [4, 6],
+      [4, 8],
+      [5, 7],
+      [5, 14],
+      [5, 15],
+      [6, 10],
+      [7, 16],
+      [7, 17],
+      [8, 9],
+      [8, 18],
+      [9, 11],
+      [10, 11],
+      [10, 19],
+      [12, 22],
+      [12, 23],
+      [12, 24],
+      [13, 25],
+      [13, 26],
+      [13, 27],
+    ],
+    geometry: "Complex (Aromatic + Tetrahedral)",
+    bondAngle: "120° (ring), ~109.5° (tetrahedral)",
+    polarity: "Polar",
+    dipole: "~2.5 D",
+    polarityVector: { x: 0.74, y: -2.39, z: 0.57 },
+    metadata: [
+      { label: "Molecular Formula", value: "C₁₀H₁₄BrNO₂" },
+      { label: "Molecular Weight", value: "260.13 g/mol" },
+      { label: "Geometry", value: "Complex Aromatic" },
+      { label: "Bond Angle", value: "120° (ring)" },
+      { label: "Polarity", value: "Polar" },
+      { label: "Dipole Moment", value: "~2.5 D" },
+      { label: "PubChem CID", value: "98527" },
+      { label: "Classification", value: "Psychoactive" },
+    ],
+  },
+};
+
+const DOUBLE_BOND_PAIRS: [number, number][] = [
+  [4, 8],
+  [6, 10],
+  [8, 9],
+  [9, 11],
+];
+
+const LEGEND_ITEMS = [
+  { label: "Carbon", color: "#4ecdc4" },
+  { label: "Hydrogen", color: "#ff6b6b" },
+  { label: "Bromine", color: "#a52a2a" },
+  { label: "Oxygen", color: "#96ceb4" },
+  { label: "Nitrogen", color: "#45b7d1" },
+  { label: "Bonds", color: "#cccccc" },
+];
+
+function createCanvasLabel(element: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+
+  if (context) {
+    context.font = "bold 86px Orbitron, sans-serif";
+    context.fillStyle = "white";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(element, 64, 64);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function Home() {
+  const [showBonds, setShowBonds] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
+  const [showElectronClouds, setShowElectronClouds] = useState(false);
+  const [showPolarity, setShowPolarity] = useState(false);
+  const [isRotating, setIsRotating] = useState(true);
+  const [isVibrating, setIsVibrating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const moleculeGroupRef = useRef<THREE.Group | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const isRotatingRef = useRef(isRotating);
+  const isVibratingRef = useRef(isVibrating);
+
+  const doubleBonds = useMemo(() => {
+    return new Set(
+      DOUBLE_BOND_PAIRS.map(([a, b]) => JSON.stringify([a, b].sort()))
+    );
+  }, []);
+
+  const molecule = MOLECULES["4-bromo-2-5-dimethoxyphenylethylamine"];
+
+  useEffect(() => {
+    isRotatingRef.current = isRotating;
+  }, [isRotating]);
+
+  useEffect(() => {
+    isVibratingRef.current = isVibrating;
+  }, [isVibrating]);
+
+  const rebuildMolecule = useCallback(() => {
+    const group = moleculeGroupRef.current;
+    if (!group) return;
+
+    // Dispose previous children
+    while (group.children.length) {
+      const child = group.children[0];
+      group.remove(child);
+
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach((mat: THREE.Material) => mat.dispose());
+        } else {
+          child.material.dispose();
+        }
+      } else if (child instanceof THREE.Sprite) {
+        if (child.material.map) {
+          child.material.map.dispose();
+        }
+        child.material.dispose();
+      } else if (child.type === "ArrowHelper") {
+        const arrow = child as THREE.ArrowHelper;
+        arrow.cone.geometry.dispose();
+        (arrow.cone.material as THREE.Material).dispose();
+        arrow.line.geometry.dispose();
+        (arrow.line.material as THREE.Material).dispose();
+      }
+    }
+
+    molecule.atoms.forEach((atom, index) => {
+      const radius = atom.element === "H" ? 0.3 : atom.element === "Br" ? 0.7 : 0.5;
+      const atomGeometry = new THREE.SphereGeometry(radius, 32, 32);
+      const atomMaterial = new THREE.MeshPhongMaterial({
+        color: atom.color,
+        shininess: 120,
+        transparent: true,
+        opacity: 0.96,
+      });
+
+      const atomMesh = new THREE.Mesh(atomGeometry, atomMaterial);
+      atomMesh.position.set(atom.x, atom.y, atom.z);
+      atomMesh.castShadow = true;
+      atomMesh.receiveShadow = true;
+      atomMesh.userData = {
+        type: "atom",
+        index,
+        basePosition: new THREE.Vector3(atom.x, atom.y, atom.z),
+      };
+      group.add(atomMesh);
+
+      if (showElectronClouds) {
+        const cloudGeometry = new THREE.SphereGeometry(radius * 1.9, 20, 20);
+        const cloudMaterial = new THREE.MeshBasicMaterial({
+          color: atom.color,
+          transparent: true,
+          opacity: 0.16,
+          wireframe: true,
+        });
+        const cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
+        cloudMesh.position.copy(atomMesh.position);
+        cloudMesh.userData = { type: "electron-cloud", index };
+        group.add(cloudMesh);
+      }
+
+      if (showLabels) {
+        const texture = createCanvasLabel(atom.element);
+        const labelMaterial = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthTest: false,
+        });
+        const sprite = new THREE.Sprite(labelMaterial);
+        const offset = atom.element === "H" ? 0.7 : 0.95;
+        sprite.position.set(atom.x, atom.y + offset, atom.z);
+        sprite.scale.set(0.8, 0.8, 0.8);
+        sprite.userData = { type: "label", index };
+        group.add(sprite);
+      }
+    });
+
+    if (showBonds) {
+      molecule.bonds.forEach(([i, j]) => {
+        const atom1 = molecule.atoms[i];
+        const atom2 = molecule.atoms[j];
+        const bondKey = JSON.stringify([i, j].sort());
+        const start = new THREE.Vector3(atom1.x, atom1.y, atom1.z);
+        const end = new THREE.Vector3(atom2.x, atom2.y, atom2.z);
+        const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        const direction = new THREE.Vector3().subVectors(end, start);
+        const distance = direction.length();
+        direction.normalize();
+
+        if (doubleBonds.has(bondKey)) {
+          const perp = new THREE.Vector3(1, 0, 0).cross(direction);
+          if (perp.length() < 0.01) {
+            perp.set(0, 1, 0).cross(direction);
+          }
+          perp.normalize().multiplyScalar(0.12);
+
+          for (const side of [1, -1]) {
+            const bondGeometry = new THREE.CylinderGeometry(0.06, 0.06, distance, 20);
+            const bondMaterial = new THREE.MeshPhongMaterial({
+              color: 0xffcc00,
+              shininess: 60,
+            });
+            const bondMesh = new THREE.Mesh(bondGeometry, bondMaterial);
+            bondMesh.position.copy(midpoint).add(perp.clone().multiplyScalar(side));
+            bondMesh.quaternion.setFromUnitVectors(
+              new THREE.Vector3(0, 1, 0),
+              direction
+            );
+            bondMesh.userData = { type: "bond" };
+            group.add(bondMesh);
+          }
+        } else {
+          const bondGeometry = new THREE.CylinderGeometry(0.07, 0.07, distance, 18);
+          const bondMaterial = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+          const bondMesh = new THREE.Mesh(bondGeometry, bondMaterial);
+          bondMesh.position.copy(midpoint);
+          bondMesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0),
+            direction
+          );
+          bondMesh.userData = { type: "bond" };
+          group.add(bondMesh);
+        }
+      });
+    }
+
+    if (showPolarity && molecule.polarityVector) {
+      const origin = new THREE.Vector3(0, 0, 0);
+      const direction = new THREE.Vector3(
+        molecule.polarityVector.x,
+        molecule.polarityVector.y,
+        molecule.polarityVector.z
+      ).normalize();
+      const arrow = new THREE.ArrowHelper(direction, origin, 3.2, 0xff3366, 0.5, 0.3);
+      arrow.userData = { type: "polarity" };
+      group.add(arrow);
+    }
+
+    const box = new THREE.Box3().setFromObject(group);
+    const center = box.getCenter(new THREE.Vector3());
+    group.position.sub(center);
+
+    setIsLoading(false);
+  }, [doubleBonds, molecule, showBonds, showElectronClouds, showLabels, showPolarity]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x071a2e);
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    const camera = new THREE.PerspectiveCamera(65, width / height, 0.1, 60);
+    camera.position.set(0, 0, 15);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(width, height);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const moleculeGroup = new THREE.Group();
+    scene.add(moleculeGroup);
+
+    const ambientLight = new THREE.AmbientLight(0x3c4a6b, 0.8);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    mainLight.position.set(6, 12, 10);
+    mainLight.castShadow = true;
+    scene.add(mainLight);
+
+    const rimLight = new THREE.PointLight(0x4ecdc4, 0.6);
+    rimLight.position.set(-6, -8, -6);
+    scene.add(rimLight);
+
+    rendererRef.current = renderer;
+    sceneRef.current = scene;
+    cameraRef.current = camera;
+    moleculeGroupRef.current = moleculeGroup;
+
+    rebuildMolecule();
+
+    const isDragging = { current: false };
+    const previous = { x: 0, y: 0 };
+
+    const canvas = renderer.domElement;
+    canvas.style.cursor = "grab";
+
+    const handlePointerDown = (event: PointerEvent) => {
+      isDragging.current = true;
+      previous.x = event.clientX;
+      previous.y = event.clientY;
+      canvas.setPointerCapture(event.pointerId);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isDragging.current) return;
+      const group = moleculeGroupRef.current;
+      if (!group) return;
+
+      const deltaX = event.clientX - previous.x;
+      const deltaY = event.clientY - previous.y;
+      previous.x = event.clientX;
+      previous.y = event.clientY;
+
+      const quaternion = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(
+          THREE.MathUtils.degToRad(deltaY * 0.4),
+          THREE.MathUtils.degToRad(deltaX * 0.4),
+          0,
+          "XYZ"
+        )
+      );
+
+      group.quaternion.multiplyQuaternions(quaternion, group.quaternion);
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      isDragging.current = false;
+      canvas.releasePointerCapture(event.pointerId);
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const cameraInstance = cameraRef.current;
+      if (!cameraInstance) return;
+      cameraInstance.position.z = THREE.MathUtils.clamp(
+        cameraInstance.position.z + event.deltaY * 0.01,
+        5,
+        28
+      );
+    };
+
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointerleave", handlePointerUp);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+
+    const handleResize = () => {
+      const target = containerRef.current;
+      const cam = cameraRef.current;
+      const render = rendererRef.current;
+      if (!target || !cam || !render) return;
+      const newWidth = target.clientWidth;
+      const newHeight = target.clientHeight;
+      cam.aspect = newWidth / newHeight;
+      cam.updateProjectionMatrix();
+      render.setSize(newWidth, newHeight);
+    };
+
+    const resizeObserver = new ResizeObserver(() => handleResize());
+    resizeObserver.observe(container);
+    window.addEventListener("resize", handleResize);
+
+    const animate = () => {
+      const rendererInstance = rendererRef.current;
+      const cameraInstance = cameraRef.current;
+      const sceneInstance = sceneRef.current;
+      const group = moleculeGroupRef.current;
+      if (!rendererInstance || !cameraInstance || !sceneInstance || !group) {
+        return;
+      }
+
+      if (isRotatingRef.current) {
+        group.rotation.y += 0.0025;
+      }
+
+      if (isVibratingRef.current) {
+        const time = performance.now() * 0.0025;
+        group.position.y = Math.sin(time) * 0.12;
+        group.position.x = Math.cos(time * 0.9) * 0.08;
+      } else {
+        group.position.x *= 0.9;
+        group.position.y *= 0.9;
+      }
+
+      rendererInstance.render(sceneInstance, cameraInstance);
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleResize);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointerleave", handlePointerUp);
+      canvas.removeEventListener("wheel", handleWheel);
+      container.removeChild(canvas);
+
+      renderer.dispose();
+      renderer.forceContextLoss();
+      scene.traverse((child: THREE.Object3D) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          mesh.geometry.dispose();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((mat: THREE.Material) => mat.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+        }
+      });
+    };
+  }, [rebuildMolecule]);
+
+  useEffect(() => {
+    rebuildMolecule();
+  }, [rebuildMolecule]);
+
+  const handleResetView = () => {
+    const camera = cameraRef.current;
+    const group = moleculeGroupRef.current;
+    if (camera && group) {
+      camera.position.set(0, 0, 15);
+      group.rotation.set(0, 0, 0);
+      group.position.set(0, 0, 0);
+    }
+  };
+
   return (
-    <>
-      <div className="flex flex-col items-center mt-50 gap-6">
-        <div className="text-2xl md:text-3xl font-bold text-shadow-lg text-shadow-primary typing-container max-w-80 sm:max-w-none">
-          <p className="typing-text">Ready-to-use Sci-Fi UI components</p>
+    <div className="space-y-24">
+      <section className="flex flex-col items-center text-center gap-6">
+        <span className="px-6 py-2 text-xs tracking-[0.35em] uppercase bg-primary/15 text-primary-foreground rounded-full">
+          Molecular Geometry Visualizer
+        </span>
+        <h1 className="text-4xl md:text-5xl font-bold text-shadow-lg text-shadow-primary max-w-4xl">
+          4-Bromo-2,5-dimethoxyphenylethylamine — explore its geometry in Cosmic fidelity
+        </h1>
+        <p className="max-w-2xl text-base md:text-lg text-foreground/80">
+          Inspect bonds, electron clouds, and polarity vectors for the psychedelic phenethylamine better known as 2C-B.
+          Cosmic UI frames and particles deliver the cinematic sci-fi experience while Three.js renders the molecular truth.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 mt-4">
+          <Button
+            type="button"
+            className="w-64 sm:w-auto"
+            onClick={() => {
+              document.getElementById("visualizer")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Launch Live Model
+          </Button>
+          <Button
+            type="button"
+            variant="accent"
+            className="w-64 sm:w-auto"
+            onClick={() => window.open("https://pubchem.ncbi.nlm.nih.gov/compound/98527", "_blank")}
+          >
+            PubChem Reference
+          </Button>
         </div>
-        <div className="text-base md:text-lg max-w-5xl text-center opacity-70">
-          A curated set of futuristic UI components — reusable, customizable,
-          and framework-friendly.
-        </div>
-        <div className="flex flex-col sm:flex-row gap-6 sm:gap-3 mt-10">
-          <Link to="/docs">
-            <Button className="w-64 sm:w-56">Get Started</Button>
-          </Link>
-          <Link to="/docs/frame">
-            <Button variant="accent" className="w-64 sm:w-56">
-              Browse Components
-            </Button>
-          </Link>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-7 w-full mt-44 px-5 2xl:px-0">
-        <div
-          className={twMerge([
-            "h-95 relative backdrop-blur-xl sm:mt-5",
-            "[--color-frame-1-stroke:var(--color-primary)]/50",
-            "[--color-frame-1-fill:var(--color-primary)]/20",
-            "[--color-frame-2-stroke:var(--color-accent)]",
-            "[--color-frame-2-fill:var(--color-accent)]/20",
-            "[--color-frame-3-stroke:var(--color-accent)]",
-            "[--color-frame-3-fill:var(--color-accent)]/20",
-            "[--color-frame-4-stroke:var(--color-accent)]",
-            "[--color-frame-4-fill:var(--color-accent)]/20",
-            "[--color-frame-5-stroke:var(--color-accent)]",
-            "[--color-frame-5-fill:var(--color-accent)]/20",
-            "[--color-frame-6-stroke:var(--color-accent)]",
-            "[--color-frame-6-fill:var(--color-accent)]/20",
-            "[--color-frame-7-stroke:var(--color-accent)]",
-            "[--color-frame-7-fill:var(--color-accent)]/20",
-            "[--color-frame-8-stroke:var(--color-primary)]/23",
-            "[--color-frame-8-fill:transparent]",
-          ])}
-        >
-          <Frame
-            className="drop-shadow-2xl drop-shadow-primary/50"
-            paths={JSON.parse(
-              '[{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","29","30"],["L","50% - 10","30"],["L","50% + 9","0% + 11.5"],["L","100% - 105","0% + 11.5"],["L","100% - 114","31"],["L","100% - 85","12"],["L","100% - 29","12"],["L","100% - 11","30"],["L","100% - 11","100% - 47"],["L","100% - 28","100% - 28"],["L","50% + 8.5","100% - 28"],["L","50% - 7.5","100% - 12"],["L","0% + 82","100% - 12"],["L","0% + 86","100% - 27"],["L","0% + 61","100% - 12"],["L","27","100% - 12"],["L","10","100% - 29"],["L","11","47"],["L","29","30"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-2-stroke)","fill":"var(--color-frame-2-fill)"},"path":[["M","0% + 40","19"],["L","50% - 42","19"],["L","50% - 46","0% + 24.5"],["L","0% + 34","0% + 24.5"],["L","0% + 40","19"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-3-stroke)","fill":"var(--color-frame-3-fill)"},"path":[["M","50% - 34.5","18"],["L","50% - 25","18"],["L","50% - 31","0% + 24.5"],["L","50% - 39.5","0% + 24.5"],["L","50% - 34.5","18"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-4-stroke)","fill":"var(--color-frame-4-fill)"},"path":[["M","50% - 16.5","16"],["L","50% - 4","16"],["L","50% - 12","0% + 24.5"],["L","50% - 24.5","0% + 24.5"],["L","50% - 16.5","16"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-5-stroke)","fill":"var(--color-frame-5-fill)"},"path":[["M","50% + 13.5","100% - 22"],["L","50% + 25","100% - 22"],["L","50% + 17","100% - 13"],["L","50% + 4.5","100% - 12.5"],["L","50% + 13.5","100% - 22"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-6-stroke)","fill":"var(--color-frame-6-fill)"},"path":[["M","50% + 30.5","100% - 22"],["L","50% + 40","100% - 22"],["L","50% + 34","100% - 14.5"],["L","50% + 24.5","100% - 14.5"],["L","50% + 30.5","100% - 21"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-7-stroke)","fill":"var(--color-frame-7-fill)"},"path":[["M","50% + 45.5","100% - 22"],["L","100% - 32.5","100% - 22"],["L","100% - 38.5","100% - 16.5"],["L","50% + 40.5","100% - 16.5"],["L","50% + 45.5","100% - 22"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-8-stroke)","fill":"var(--color-frame-8-fill)"},"path":[["M","35","10"],["L","50% - 4","10"],["L","50% + 8","0% + 0"],["L","100% - 97","0% + 0"],["L","100% - 109","37"],["L","100% - 83","0"],["L","100% - 22","0"],["L","100% + 0","22"],["L","100% + 0","100% - 42"],["L","100% - 35","100% - 6"],["L","50% + 1.5","100% - 6"],["L","50% - 6.5","100% + 0"],["L","0% + 73.00000000000001","100% + 0"],["L","0% + 85","100% - 32"],["L","0% + 55","100% + 0"],["L","26","100% + 0"],["L","0","100% - 27"],["L","0","43"],["L","35","10"]]}]'
-            )}
-          />
-          <div className="relative px-12 py-14 flex flex-col">
-            <div className="text-3xl text-shadow-lg text-shadow-primary font-medium">
-              $724,091.47
-            </div>
-            <div className="opacity-70 mt-2">ITEM SALES</div>
-            <div className="w-px h-7 border-r-3 mx-auto mt-3 border-dashed border-primary shadow shadow-primary"></div>
-            <div className="w-full h-40">
-              <Chart
-                config={{
-                  type: "bar",
-                  data: {
-                    labels: [
-                      "Jan",
-                      "Feb",
-                      "Mar",
-                      "Apr",
-                      "May",
-                      "Jun",
-                      "Jul",
-                      "Aug",
-                      "Sep",
-                      "Oct",
-                      "Nov",
-                      "Dec",
-                    ],
-                    datasets: [
-                      {
-                        label: "Html Template",
-                        maxBarThickness: 12,
-                        data: [
-                          60, 150, 30, 200, 180, 50, 180, 120, 230, 180, 250,
-                          270,
-                        ],
-                        backgroundColor: () => getColor("--color-primary", 0.3),
-                        borderColor: () => getColor("--color-primary"),
-                        borderWidth: 1,
-                      },
-                    ],
-                  },
-                  options: {
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        display: false,
-                      },
-                    },
-                    scales: {
-                      x: {
-                        display: false,
-                      },
-                      y: {
-                        display: false,
-                      },
-                    },
-                  },
-                }}
+      </section>
+
+      <section
+        id="visualizer"
+        className="grid gap-10 xl:grid-cols-[360px,1fr] items-start"
+      >
+        <div className="space-y-8">
+          <CosmicPanel title="Visualization Controls">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleButton
+                active={showBonds}
+                label="Bonds"
+                onClick={() => setShowBonds((prev) => !prev)}
+              />
+              <ToggleButton
+                active={showLabels}
+                label="Atom Labels"
+                onClick={() => setShowLabels((prev) => !prev)}
+              />
+              <ToggleButton
+                active={showElectronClouds}
+                label="Electron Clouds"
+                onClick={() => setShowElectronClouds((prev) => !prev)}
+              />
+              <ToggleButton
+                active={showPolarity}
+                label="Polarity Vector"
+                onClick={() => setShowPolarity((prev) => !prev)}
               />
             </div>
-          </div>
-        </div>
-        <div
-          className={twMerge([
-            "h-95 relative backdrop-blur-xl sm:-mt-8",
-            "[--color-frame-1-stroke:var(--color-primary)]/50",
-            "[--color-frame-1-fill:var(--color-primary)]/20",
-            "[--color-frame-2-stroke:var(--color-accent)]",
-            "[--color-frame-2-fill:var(--color-accent)]/20",
-            "[--color-frame-3-stroke:var(--color-accent)]",
-            "[--color-frame-3-fill:var(--color-accent)]/20",
-            "[--color-frame-4-stroke:var(--color-accent)]",
-            "[--color-frame-4-fill:var(--color-accent)]/20",
-            "[--color-frame-5-stroke:var(--color-primary)]/23",
-            "[--color-frame-5-fill:transparent]",
-          ])}
-        >
-          <Frame
-            className="drop-shadow-2xl drop-shadow-primary/50"
-            paths={JSON.parse(
-              '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","37","12"],["L","0% + 59","12"],["L","0% + 85","0% + 33"],["L","79","0% + 12"],["L","50% - 3","12"],["L","50% + 16","30"],["L","100% - 35","30"],["L","100% - 16","47"],["L","100% - 16","100% - 47.05882352941177%"],["L","100% - 8","100% - 44.85294117647059%"],["L","100% - 9","100% - 16.666666666666668%"],["L","100% - 17","100% - 14.705882352941176%"],["L","100% - 17","100% - 30"],["L","100% - 34","100% - 12"],["L","50% + 13","100% - 12"],["L","50% + 15","100% - 26"],["L","50% - 11","100% - 12"],["L","37","100% - 12"],["L","19","100% - 30"],["L","19","0% + 50.490196078431374%"],["L","10","0% + 48.529411764705884%"],["L","10","0% + 20.098039215686274%"],["L","0% + 19.000000000000004","0% + 18.38235294117647%"],["L","19","29"],["L","37","12"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-2-stroke)","fill":"var(--color-frame-2-fill)"},"path":[["M","50% + 10","15"],["L","50% + 19","15"],["L","50% + 24","0% + 20"],["L","50% + 16","0% + 20"],["L","50% + 10","15"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-3-stroke)","fill":"var(--color-frame-3-fill)"},"path":[["M","50% + 25","15"],["L","50% + 34","15"],["L","50% + 40","0% + 21"],["L","50% + 31","0% + 21"],["L","50% + 25","15"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-4-stroke)","fill":"var(--color-frame-4-fill)"},"path":[["M","50% + 40","15"],["L","50% + 52","15"],["L","50% + 61","0% + 23"],["L","50% + 49","0% + 23"],["L","50% + 40","15"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-5-stroke)","fill":"var(--color-frame-5-fill)"},"path":[["M","36","3"],["L","0% + 58","0"],["L","0% + 84","0% + 40"],["L","81","0% + 0"],["L","50% - 1","4"],["L","50% + 5","6"],["L","50% + 54","7"],["L","50% + 74","23"],["L","100% - 32","21"],["L","100% - 8","42"],["L","100% - 9","100% - 52.450980392156865%"],["L","100% + 0","100% - 50.245098039215684%"],["L","100% + 0","100% - 15.196078431372548%"],["L","100% - 7","100% - 13.480392156862745%"],["L","100% - 7","100% - 27"],["L","100% - 29","100% - 3"],["L","50% + 14","100% + 0"],["L","50% + 21","100% - 31"],["L","50% - 13","100% + 0"],["L","37","100% - 4"],["L","11","100% - 28"],["L","10","0% + 55.3921568627451%"],["L","0","0% + 52.94117647058823%"],["L","1","0% + 18.627450980392158%"],["L","11","0% + 16.666666666666668%"],["L","11","25"],["L","36","3"]]}]'
-            )}
-          />
-          <div className="relative px-12 py-14">
-            <div className="opacity-70 mb-2">SUBSCRIPTION</div>
-            <div className="text-3xl text-shadow-lg text-shadow-primary font-medium">
-              +2,350,500
-            </div>
-            <div className="opacity-70 mt-3">+180.1% from last month</div>
-            <div className="w-full h-24">
-              <Chart
-                config={{
-                  type: "line",
-                  data: {
-                    labels: [
-                      "Jan",
-                      "Feb",
-                      "Mar",
-                      "Apr",
-                      "May",
-                      "Jun",
-                      "Jul",
-                      "Aug",
-                      "Sep",
-                      "Oct",
-                      "Nov",
-                      "Dec",
-                    ],
-                    datasets: [
-                      {
-                        label: "Html Template",
-                        maxBarThickness: 12,
-                        data: [
-                          60, 15, 80, 100, 180, 50, 180, 120, 230, 180, 250,
-                          370,
-                        ],
-                        backgroundColor: () => getColor("--color-primary", 0.3),
-                        borderColor: () => getColor("--color-primary"),
-                        borderWidth: 1,
-                      },
-                    ],
-                  },
-                  options: {
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        display: false,
-                      },
-                    },
-                    scales: {
-                      x: {
-                        display: false,
-                      },
-                      y: {
-                        display: false,
-                      },
-                    },
-                  },
-                }}
+          </CosmicPanel>
+
+          <CosmicPanel title="Animation">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleButton
+                active={isRotating}
+                label="Auto Rotation"
+                onClick={() => setIsRotating((prev) => !prev)}
               />
-            </div>
-            <MenuRoot>
-              <MenuTrigger className="w-full mt-8">
-                Download Reports
-              </MenuTrigger>
-              <MenuPositioner>
-                {/* className="[--color-frame-1-fill:color-mix(in_hsl,_var(--color-primary)_80%,_var(--color-background)_60%)]/60 [--color-frame-1-stroke:var(--color-primary)]/70" */}
-                <MenuContent>
-                  <MenuItem value="edit">
-                    <FilePenLine className="size-4 me-2.5" /> Monthly Report
-                  </MenuItem>
-                  <MenuItem value="duplicate">
-                    <CopySlash className="size-4 me-2.5" /> Annual Report
-                  </MenuItem>
-                </MenuContent>
-              </MenuPositioner>
-            </MenuRoot>
-          </div>
-        </div>
-        <div
-          className={twMerge([
-            "h-95 relative backdrop-blur-xl sm:mt-5",
-            "[--color-frame-1-stroke:var(--color-primary)]/50",
-            "[--color-frame-1-fill:var(--color-primary)]/20",
-            "[--color-frame-2-stroke:var(--color-accent)]",
-            "[--color-frame-2-fill:var(--color-accent)]/20",
-            "[--color-frame-3-stroke:var(--color-accent)]",
-            "[--color-frame-3-fill:var(--color-accent)]/20",
-            "[--color-frame-4-stroke:var(--color-accent)]",
-            "[--color-frame-4-fill:var(--color-accent)]/20",
-            "[--color-frame-5-stroke:var(--color-primary)]/23",
-            "[--color-frame-5-fill:transparent]",
-          ])}
-        >
-          <Frame
-            className="drop-shadow-2xl drop-shadow-primary/50"
-            paths={JSON.parse(
-              '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","25","12"],["L","0% + 74.5","12"],["L","0% + 102.5","0% + 26.5"],["L","96","0% + 12.5"],["L","100% - 83","12"],["L","100% - 102","44"],["L","100% - 67","12"],["L","100% - 23","12"],["L","100% - 7","30"],["L","100% - 6","0% + 26.666666666666668%"],["L","100% - 14","0% + 28.641975308641975%"],["L","100% - 14","100% - 35.55555555555556%"],["L","100% - 7","100% - 33.33333333333332%"],["L","100% - 7","100% - 40"],["L","100% - 22","100% - 25"],["L","50% + 7.5","100% - 25"],["L","50% - 6.5","100% - 9"],["L","24","100% - 9"],["L","9","100% - 24"],["L","9","100% - 33.58024691358026%"],["L","17","100% - 36.04938271604938%"],["L","17","0% + 28.641975308641975%"],["L","8","0% + 26.666666666666668%"],["L","8","30"],["L","25","12"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-2-stroke)","fill":"var(--color-frame-2-fill)"},"path":[["M","50% + 12.5","100% - 19"],["L","50% + 25","100% - 19"],["L","50% + 17","100% - 11.5"],["L","50% + 4.5","100% - 11.5"],["L","50% + 12.5","100% - 19"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-3-stroke)","fill":"var(--color-frame-3-fill)"},"path":[["M","50% + 30.5","100% - 19"],["L","50% + 40","100% - 19"],["L","50% + 34","100% - 13.5"],["L","50% + 24.5","100% - 13.5"],["L","50% + 30.5","100% - 19"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-4-stroke)","fill":"var(--color-frame-4-fill)"},"path":[["M","50% + 46.5","100% - 19"],["L","50% + 54","100% - 19"],["L","50% + 48","100% - 14.5"],["L","50% + 40.5","100% - 14"],["L","50% + 46.5","100% - 19"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-5-stroke)","fill":"var(--color-frame-5-fill)"},"path":[["M","23","5"],["L","0% + 79.5","5"],["L","0% + 106.5","0% + 24.5"],["L","97","0% + 4.5"],["L","100% - 82","1"],["L","100% - 102","50"],["L","100% - 67","1"],["L","100% - 21","6"],["L","100% + 0","27"],["L","100% + 0","0% + 27.407407407407412%"],["L","100% - 8","0% + 29.876543209876544%"],["L","100% - 8","100% - 41.97530864197531%"],["L","100% + 0","0% + 60.74074074074073%"],["L","100% + 0","100% - 37"],["L","100% - 20","100% - 18"],["L","50% + 61.5","100% - 18"],["L","50% + 48.5","100% - 6"],["L","50% + 3.5","100% - 6"],["L","50% - 3.5","100% + 0"],["L","26","100% + 0"],["L","0","100% - 24"],["L","0","100% - 39.99999999999999%"],["L","11","100% - 42.71604938271605%"],["L","10","0% + 29.135802469135804%"],["L","0","0% + 26.666666666666668%"],["L","0","28"],["L","23","5"]]}]'
-            )}
-          />
-          <div className="relative px-12 py-14">
-            <div className="flex items-center">
-              <Button shape="flat" className="py-1 px-5">
-                <ChevronLeft className="size-4" />
-              </Button>
-              <div className="text-xl mx-auto text-shadow-lg text-shadow-primary font-bold">
-                JUNE
-              </div>
-              <Button shape="flat" className="py-1 px-5">
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-            <div className="opacity-70 my-2 grid grid-cols-7">
-              <div className="text-center py-2.5">Su</div>
-              <div className="text-center py-2.5">Mo</div>
-              <div className="text-center py-2.5">Tu</div>
-              <div className="text-center py-2.5">We</div>
-              <div className="text-center py-2.5">Th</div>
-              <div className="text-center py-2.5">Fr</div>
-              <div className="text-center py-2.5">Sa</div>
-            </div>
-            <div
-              className={twMerge([
-                "grid grid-cols-7 gap-y-2",
-                "[--color-frame-1-stroke:var(--color-primary)]/30",
-                "[--color-frame-1-fill:var(--color-primary)]/10",
-              ])}
-            >
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  1
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  2
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  3
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  4
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range first-date",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  5
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range first-date-after",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  6
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  7
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  8
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  9
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  10
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range second-date-before",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  11
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0 in-range second-date",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  12
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  13
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  14
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  15
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  16
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  17
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  18
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  19
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  20
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  21
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  22
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  23
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  24
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  25
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  26
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  27
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  28
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  29
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  30
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  1
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  2
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  3
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  4
-                </span>
-              </div>
-              <div
-                className={twMerge([
-                  "cursor-pointer group text-center py-1.5 relative overflow-hidden [&_svg]:hidden [&.in-range_svg]:block [&.in-range:nth-child(7n)>div]:right-0 [&.in-range:nth-child(7n+1)>div]:left-0",
-                  "[&.first-date]:[--color-frame-1-stroke:var(--color-accent)] [&.first-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                  "[&.second-date]:[--color-frame-1-stroke:var(--color-accent)] [&.second-date]:[--color-frame-1-fill:var(--color-accent)]/50",
-                ])}
-              >
-                <div className="h-full -inset-x-5 inset-y-0 absolute group-[.first-date]:inset-x-0 group-[.first-date-after]:left-0 group-[.second-date]:inset-x-0 group-[.second-date-before]:right-0">
-                  <Frame
-                    paths={JSON.parse(
-                      '[{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","11","0"],["L","100% - 4.5","0"],["L","100% + 0","0% + 5.5"],["L","100% - 11","100% + 0"],["L","4","100% + 0"],["L","0","100% - 5"],["L","11","0"]]}]'
-                    )}
-                  />
-                </div>
-                <span className="relative group-[.first-date]:font-bold group-[.first-date]:text-shadow-lg group-[.first-date]:text-shadow-accent/50 group-[.second-date]:font-bold group-[.second-date]:text-shadow-lg group-[.second-date]:text-shadow-accent/50">
-                  5
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div
-          className={twMerge([
-            "h-95 relative backdrop-blur-xl sm:-mt-8",
-            "[--color-frame-1-stroke:var(--color-primary)]/50",
-            "[--color-frame-1-fill:var(--color-primary)]/20",
-            "[--color-frame-2-stroke:var(--color-accent)]",
-            "[--color-frame-2-fill:var(--color-accent)]/20",
-            "[--color-frame-3-stroke:var(--color-accent)]",
-            "[--color-frame-3-fill:var(--color-accent)]/20",
-            "[--color-frame-4-stroke:var(--color-accent)]",
-            "[--color-frame-4-fill:var(--color-accent)]/20",
-            "[--color-frame-5-stroke:var(--color-primary)]/23",
-            "[--color-frame-5-fill:transparent]",
-          ])}
-        >
-          <Frame
-            className="drop-shadow-2xl drop-shadow-primary/50"
-            paths={JSON.parse(
-              '[{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-1-stroke)","fill":"var(--color-frame-1-fill)"},"path":[["M","32","12"],["L","50% - 94","12"],["L","50% - 77","0% + 29.5"],["L","50% + 74","0% + 29.5"],["L","50% + 91","12"],["L","100% - 30","12"],["L","100% - 11","29"],["L","100% - 11","0% + 30.37037037037037%"],["L","100% - 20","0% + 32.592592592592595%"],["L","100% - 20","100% - 32.098765432098766%"],["L","100% - 11","100% - 29.62962962962963%"],["L","100% - 11","100% - 27"],["L","100% - 28","100% - 10"],["L","50% + 80","100% - 10"],["L","50% + 84","100% - 30"],["L","50% + 70","100% - 18"],["L","50% - 75","100% - 18"],["L","50% - 82","100% - 10"],["L","26","100% - 10"],["L","9","100% - 27"],["L","9","100% - 29.62962962962963%"],["L","17","100% - 31.85185185185185%"],["L","18","0% + 32.839506172839506%"],["L","8","0% + 30.370370370370356%"],["L","8","29"],["L","21","18"],["L","42","31"],["L","32","12"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-2-stroke)","fill":"var(--color-frame-2-fill)"},"path":[["M","50% - 81","15"],["L","50% - 74","15"],["L","50% - 69","0% + 19.5"],["L","50% - 76","0% + 19.5"],["L","50% - 81","15"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-3-stroke)","fill":"var(--color-frame-3-fill)"},"path":[["M","50% - 68.00000000000001","15"],["L","50% - 58","15"],["L","50% - 52","0% + 21.5"],["L","50% - 61","0% + 21.5"],["L","50% - 68.00000000000001","15"]]},{"show":false,"style":{"strokeWidth":"1","stroke":"var(--color-frame-4-stroke)","fill":"var(--color-frame-4-fill)"},"path":[["M","50% - 53","15"],["L","50% + 80","15"],["L","50% + 71","0% + 23.5"],["L","50% - 43","0% + 23.5"],["L","50% - 53","15"]]},{"show":true,"style":{"strokeWidth":"1","stroke":"var(--color-frame-5-stroke)","fill":"var(--color-frame-5-fill)"},"path":[["M","26","0"],["L","50% - 93","0"],["L","50% - 83","0% + 7.5"],["L","50% + 83.99999999999994","0% + 7.5"],["L","50% + 92.99999999999994","0"],["L","100% - 25","0"],["L","100% + 0","24"],["L","100% - 0","0% + 34.074074074074076%"],["L","100% - 12","0% + 37.03703703703704%"],["L","100% - 12","100% - 33.58024691358025%"],["L","100% + 0","100% - 30.617283950617285%"],["L","100% + 0","100% - 27"],["L","100% - 25","100% + 0"],["L","50% + 71","100% + 0"],["L","50% + 92","100% - 32"],["L","50% + 64","100% - 10"],["L","50% - 65.99999999999997","100% - 11"],["L","50% - 78","100% + 0"],["L","22","100% + 0"],["L","0","100% - 22"],["L","0","100% - 34.074074074074076%"],["L","9","100% - 36.2962962962963%"],["L","9","0% + 33.82716049382717%"],["L","0","0% + 31.604938271604937%"],["L","0","19"],["L","15","10"],["L","40","41"],["L","26","0"]]}]'
-            )}
-          />
-          <div className="relative px-12 py-14 flex flex-col items-center">
-            <div className="text-2xl text-shadow-lg text-shadow-primary font-bold">
-              Move Goal
-            </div>
-            <div className="opacity-70 mt-2">Set your daily activity goal.</div>
-            <div className="flex items-center gap-5 mt-7">
-              <Button shape="flat" className="py-0 px-5 text-lg">
-                -
-              </Button>
-              <div className="flex flex-col items-center justify-center">
-                <div className="text-3xl text-shadow-lg text-shadow-primary font-medium">
-                  2,100
-                </div>
-                <div className="opacity-70 mt-1">CALORIES/DAY</div>
-              </div>
-              <Button shape="flat" className="py-0 px-5 text-lg">
-                +
-              </Button>
-            </div>
-            <div className="w-full h-25 mt-5">
-              <Chart
-                config={{
-                  type: "bar",
-                  data: {
-                    labels: [
-                      "Jan",
-                      "Feb",
-                      "Mar",
-                      "Apr",
-                      "May",
-                      "Jun",
-                      "Jul",
-                      "Aug",
-                      "Sep",
-                      "Oct",
-                      "Nov",
-                      "Dec",
-                    ],
-                    datasets: [
-                      {
-                        label: "Html Template",
-                        maxBarThickness: 12,
-                        data: [
-                          60, 150, 30, 200, 180, 50, 180, 120, 230, 180, 250,
-                          270,
-                        ],
-                        backgroundColor: () => getColor("--color-primary", 0.3),
-                        borderColor: () => getColor("--color-primary"),
-                        borderWidth: 1,
-                      },
-                    ],
-                  },
-                  options: {
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        display: false,
-                      },
-                    },
-                    scales: {
-                      x: {
-                        display: false,
-                      },
-                      y: {
-                        display: false,
-                      },
-                    },
-                  },
-                }}
+              <ToggleButton
+                active={isVibrating}
+                label="Vibration"
+                onClick={() => setIsVibrating((prev) => !prev)}
               />
+              <Button
+                type="button"
+                variant="secondary"
+                className="sm:col-span-2 w-full"
+                onClick={handleResetView}
+              >
+                Reset View
+              </Button>
+            </div>
+          </CosmicPanel>
+
+          <CosmicPanel title="Molecular Properties">
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-6 text-left">
+              {molecule.metadata.map((item) => (
+                <div key={item.label}>
+                  <dt className="text-xs uppercase tracking-[0.35em] text-foreground/60">
+                    {item.label}
+                  </dt>
+                  <dd className="mt-1 text-base text-shadow-lg text-shadow-primary/30">
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </CosmicPanel>
+        </div>
+
+        <div className="relative">
+          <div
+            className={twMerge(
+              "relative backdrop-blur-xl",
+              "[--color-frame-1-stroke:var(--color-primary)]/70",
+              "[--color-frame-1-fill:var(--color-primary)]/12",
+              "[--color-frame-2-stroke:var(--color-accent)]/35",
+              "[--color-frame-2-fill:transparent]"
+            )}
+          >
+            <Frame
+              enableBackdropBlur
+              className="drop-shadow-2xl drop-shadow-primary/40"
+              paths={VIEWER_FRAME_PATHS}
+            />
+            <div className="relative p-8">
+              <div
+                ref={containerRef}
+                className="relative h-[600px] w-full overflow-hidden rounded-2xl bg-gradient-to-br from-black/60 via-primary/5 to-transparent"
+              >
+                {isLoading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-lg text-primary">
+                    <span className="animate-pulse tracking-[0.4em] uppercase text-xs text-foreground/60">
+                      Initializing renderer
+                    </span>
+                    <span className="text-xl font-semibold text-shadow-lg text-shadow-primary">
+                      Loading 2C-B Molecule…
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="absolute bottom-6 left-6">
+                <OverlayPanel title="Atom Legend">
+                  <div className="grid grid-cols-2 gap-3">
+                    {LEGEND_ITEMS.map((item) => (
+                      <div key={item.label} className="flex items-center gap-3 text-xs">
+                        <span
+                          className="h-3.5 w-3.5 rounded-full"
+                          style={{ background: item.color }}
+                        />
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </OverlayPanel>
+              </div>
+
+              <div className="absolute right-6 top-6 max-w-xs">
+                <OverlayPanel title="Interaction Guide">
+                  <ul className="space-y-2 text-xs leading-relaxed">
+                    <li>Click and drag to rotate the molecule.</li>
+                    <li>Scroll to zoom between macro and micro scales.</li>
+                    <li>Toggle overlays from the control deck.</li>
+                    <li>Double bonds glow amber for rapid identification.</li>
+                    <li>Enable vibration to feel atomic resonance.</li>
+                  </ul>
+                </OverlayPanel>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div className="lg:hidden">
-        <Menu />
-      </div>
-    </>
+      </section>
+
+      <section id="insights" className="grid gap-8 lg:grid-cols-3">
+        <InsightCard
+          title="Aromatic Core"
+          highlight="Six-carbon ring"
+          description="Witness conjugated pi systems with alternating single and double bonds, the hallmark of 2C-B's phenethylamine scaffold."
+        />
+        <InsightCard
+          title="Polar Hotspots"
+          highlight="Methoxy & amine"
+          description="Activate polarity vectors to visualize electron-rich oxygen and nitrogen sites responsible for binding affinity."
+        />
+        <InsightCard
+          title="Dynamic Perspective"
+          highlight="Realtime rotation"
+          description="Harness Cosmic UI motion with Three.js to interrogate steric hindrance, torsion, and accessible conformers."
+        />
+      </section>
+    </div>
   );
 }
 
-export default Main;
+function ToggleButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "accent" : "secondary"}
+      className="w-full"
+      onClick={onClick}
+    >
+      <span className="flex w-full items-center justify-between text-xs uppercase tracking-[0.35em]">
+        <span>{label}</span>
+        <span className="text-[0.625rem] font-semibold text-foreground/70">
+          {active ? "ON" : "OFF"}
+        </span>
+      </span>
+    </Button>
+  );
+}
+
+function CosmicPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={twMerge(
+        "relative backdrop-blur-xl",
+        "[--color-frame-1-stroke:var(--color-primary)]/70",
+        "[--color-frame-1-fill:var(--color-primary)]/12",
+        "[--color-frame-2-stroke:var(--color-accent)]/30",
+        "[--color-frame-2-fill:transparent]"
+      )}
+    >
+      <Frame
+        enableBackdropBlur
+        className="drop-shadow-2xl drop-shadow-primary/40"
+        paths={PANEL_FRAME_PATHS}
+      />
+      <div className="relative px-8 py-9 space-y-6">
+        <div className="text-sm uppercase tracking-[0.35em] text-foreground/60">
+          {title}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function OverlayPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={twMerge(
+        "relative backdrop-blur-xl",
+        "[--color-frame-1-stroke:var(--color-primary)]/70",
+        "[--color-frame-1-fill:var(--color-primary)]/12",
+        "[--color-frame-2-stroke:var(--color-accent)]/30",
+        "[--color-frame-2-fill:transparent]"
+      )}
+    >
+      <Frame
+        enableBackdropBlur
+        className="drop-shadow-xl drop-shadow-primary/40"
+        paths={OVERLAY_FRAME_PATHS}
+      />
+      <div className="relative px-6 py-6 space-y-4 text-left">
+        <div className="text-[0.65rem] uppercase tracking-[0.35em] text-foreground/60">
+          {title}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InsightCard({
+  title,
+  highlight,
+  description,
+}: {
+  title: string;
+  highlight: string;
+  description: string;
+}) {
+  return (
+    <div
+      className={twMerge(
+        "relative backdrop-blur-xl",
+        "[--color-frame-1-stroke:var(--color-primary)]/60",
+        "[--color-frame-1-fill:var(--color-primary)]/10",
+        "[--color-frame-2-stroke:var(--color-accent)]/25",
+        "[--color-frame-2-fill:transparent]"
+      )}
+    >
+      <Frame
+        enableBackdropBlur
+        className="drop-shadow-xl drop-shadow-primary/30"
+        paths={PANEL_FRAME_PATHS}
+      />
+      <div className="relative px-7 py-8 space-y-4">
+        <div className="text-xs uppercase tracking-[0.4em] text-foreground/60">
+          {title}
+        </div>
+        <div className="text-2xl font-semibold text-shadow-lg text-shadow-primary">
+          {highlight}
+        </div>
+        <p className="text-sm leading-relaxed text-foreground/75">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+export default Home;
